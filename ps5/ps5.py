@@ -54,8 +54,23 @@ def process(url):
 
 # Problem 1
 
-# TODO: NewsStory
-
+class NewsStory():
+    def __init__(self, guid, title, description, link, pubdate):
+        self._guid = guid
+        self._title = title
+        self._description = description
+        self._link = link
+        self._pubdate = pubdate
+    def get_guid(self):
+        return self._guid
+    def get_title(self):
+        return self._title
+    def get_description(self):
+        return self._description
+    def get_link(self):
+        return self._link
+    def get_pubdate(self):
+        return self._pubdate
 
 #======================
 # Triggers
@@ -73,36 +88,85 @@ class Trigger(object):
 # PHRASE TRIGGERS
 
 # Problem 2
-# TODO: PhraseTrigger
 
+class PhraseTrigger(Trigger):
+    def __init__(self, phrase):
+        self._words = tuple(phrase.lower().split(' '))
+    def evaluate_text(self, text):
+        text = text.lower()
+        # Replace all punctuation with space.
+        for p in string.punctuation:
+            text = text.replace(p, ' ')
+        words = [w for w in text.split(' ') if w]
+        for i, w in enumerate(words):
+            if w == self._words[0]:
+                return tuple(words[i: i + len(self._words)]) == self._words
+        return False
 # Problem 3
-# TODO: TitleTrigger
+
+class TitleTrigger(PhraseTrigger):
+    def evaluate(self, story):
+        return self.evaluate_text(story.get_title())
 
 # Problem 4
-# TODO: DescriptionTrigger
+
+class DescriptionTrigger(PhraseTrigger):
+    def evaluate(self, story):
+        return self.evaluate_text(story.get_description())
 
 # TIME TRIGGERS
 
 # Problem 5
-# TODO: TimeTrigger
 # Constructor:
 #        Input: Time has to be in EST and in the format of "%d %b %Y %H:%M:%S".
 #        Convert time from string to a datetime before saving it as an attribute.
 
+class TimeTrigger(Trigger):
+    def __init__(self, time_string):
+        self._time = datetime.strptime(time_string, '%d %b %Y %H:%M:%S')
+        self._time = self._time.replace(tzinfo=pytz.UTC)
+
 # Problem 6
 # TODO: BeforeTrigger and AfterTrigger
 
+class BeforeTrigger(TimeTrigger):
+    def evaluate(self, story):
+        pubtime = story.get_pubdate()
+        pubtime = pubtime.replace(tzinfo=pytz.UTC)
+        return pubtime < self._time
+        
+class AfterTrigger(TimeTrigger):
+    def evaluate(self, story):
+        pubtime = story.get_pubdate()
+        pubtime = pubtime.replace(tzinfo=pytz.UTC)
+        return pubtime >= self._time
 
 # COMPOSITE TRIGGERS
 
 # Problem 7
-# TODO: NotTrigger
+class NotTrigger(Trigger):
+    def __init__(self, trigger):
+        self._trigger = trigger
+    def evaluate(self, story):
+        return not self._trigger.evaluate(story)
 
 # Problem 8
-# TODO: AndTrigger
+class AndTrigger(Trigger):
+    def __init__(self, left_trigger, right_trigger):
+        self._left_trigger = left_trigger
+        self._right_trigger = right_trigger
+    def evaluate(self, story):
+        return self._left_trigger.evaluate(story) \
+            and self._right_trigger.evaluate(story)
 
 # Problem 9
-# TODO: OrTrigger
+class OrTrigger(Trigger):
+    def __init__(self, left_trigger, right_trigger):
+        self._left_trigger = left_trigger
+        self._right_trigger = right_trigger
+    def evaluate(self, story):
+        return self._left_trigger.evaluate(story) \
+            or self._right_trigger.evaluate(story)
 
 
 #======================
@@ -116,10 +180,8 @@ def filter_stories(stories, triggerlist):
 
     Returns: a list of only the stories for which a trigger in triggerlist fires.
     """
-    # TODO: Problem 10
-    # This is a placeholder
-    # (we're just returning all the stories, with no filtering)
-    return stories
+    return [s for s in stories
+            if any([t.evaluate(s) for t in triggerlist])]
 
 
 
@@ -143,12 +205,37 @@ def read_trigger_config(filename):
         if not (len(line) == 0 or line.startswith('//')):
             lines.append(line)
 
-    # TODO: Problem 11
     # line is the list of lines that you need to parse and for which you need
     # to build triggers
 
-    print(lines) # for now, print it so you see what it contains!
+    triggers = {}
+    trigger_class_map = {
+        'TITLE': TitleTrigger,        
+        'DESCRIPTION': DescriptionTrigger,        
+        'AFTER': AfterTrigger,
+        'BEFORE': BeforeTrigger,
+        'NOT': NotTrigger,
+        'AND': AndTrigger,
+        'OR': OrTrigger,
+    }
+    two_params_trigger = set([
+        'AND', 'OR',    
+    ])
+    triggerlist = []
+    def get_trigger(inputs):
+        trigger_class = trigger_class_map[inputs[0]]
+        if inputs[0] in two_params_trigger:
+            return trigger_class(triggers[inputs[1]],
+                triggers[inputs[2]])
+        return trigger_class(inputs[1])
 
+    for i, line in enumerate(lines):
+        inputs = line.split(',')
+        if inputs[0] == 'ADD':
+            triggerlist.extend([triggers[n] for n in inputs[1:]])
+            continue
+        triggers[inputs[0]] = get_trigger(inputs[1:])
+    return triggerlist
 
 
 SLEEPTIME = 120 #seconds -- how often we poll
@@ -161,11 +248,12 @@ def main_thread(master):
         t2 = DescriptionTrigger("Trump")
         t3 = DescriptionTrigger("Clinton")
         t4 = AndTrigger(t2, t3)
-        triggerlist = [t1, t4]
+        t5 = DescriptionTrigger("car")
+        triggerlist = [t1, t4, t5]
 
         # Problem 11
         # TODO: After implementing read_trigger_config, uncomment this line 
-        # triggerlist = read_trigger_config('triggers.txt')
+        triggerlist = read_trigger_config('triggers.txt')
         
         # HELPER CODE - you don't need to understand this!
         # Draws the popup window that displays the filtered stories
@@ -213,6 +301,8 @@ def main_thread(master):
             time.sleep(SLEEPTIME)
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print(e)
 
 

@@ -1,5 +1,7 @@
 # 6.00
 # Problem Set 5 Test Suite
+from __future__ import print_function
+
 import unittest
 from ps5 import *
 from datetime import timedelta
